@@ -1,91 +1,62 @@
 import axios from 'axios';
 
-const CLIENT_ID = import.meta.env.VITE_IGDB_CLIENT_ID;
-const CLIENT_SECRET = import.meta.env.VITE_IGDB_CLIENT_SECRET;
+// We point to our local Vercel function.
+// In development, if not running 'vercel dev', you might need to configure a proxy in vite.config.js
+// or just run 'vercel dev'.
+const IGDB_PROXY_URL = '/api/igdb';
 
-let accessToken = null;
-let tokenExpiration = 0;
-
-const TOKEN_URL = 'https://id.twitch.tv/oauth2/token';
-const IGDB_BASE_URL = 'https://api.igdb.com/v4';
-
-// Get OAuth token from Twitch (used for IGDB)
-const getAccessToken = async () => {
-    const now = Date.now();
-
-    // reuse token if still valid
-    if (accessToken && now < tokenExpiration) {
-        return accessToken;
-    }
-
-    try {
-        const params = new URLSearchParams();
-        params.append('client_id', CLIENT_ID);
-        params.append('client_secret', CLIENT_SECRET);
-        params.append('grant_type', 'client_credentials');
-
-        const { data } = await axios.post(TOKEN_URL, params, {
-            headers: {
-                'Content-Type': 'application/x-www-form-urlencoded',
-            },
-        });
-
-        accessToken = data.access_token;
-        tokenExpiration = now + data.expires_in * 1000;
-        return accessToken;
-    } catch (error) {
-        console.error(
-            'Error fetching access token:',
-            error?.response?.data || error.message
-        );
-        throw error;
-    }
-};
-
-// Axios instance that talks directly to IGDB
+// Create api instance
 const api = axios.create({
-    baseURL: IGDB_BASE_URL,
+    baseURL: IGDB_PROXY_URL,
     headers: {
-        'Client-ID': CLIENT_ID,
+        'Content-Type': 'application/json',
         'Accept': 'application/json',
     },
 });
 
-// Add token before every request
-api.interceptors.request.use(async (config) => {
-    const token = await getAccessToken();
-    config.headers.Authorization = `Bearer ${token}`;
-    return config;
-});
+// Helper to make the request to our proxy
+// The proxy expects { query: "..." }
+const fetchFromProxy = async (query) => {
+    try {
+        const response = await api.post('', { query });
+        return response;
+    } catch (error) {
+        // If 404/500, log it
+        console.error('Proxy request failed:', error);
+        throw error;
+    }
+};
 
 // ---- API functions ----
 
 export const getGames = async (page = 1, limit = 20) => {
     try {
         const offset = (page - 1) * limit;
-        const response = await api.post('/games', `
+        const query = `
             fields name, cover.url, rating, first_release_date, summary, slug;
             sort first_release_date desc;
             limit ${limit};
             offset ${offset};
             where cover != null & rating != null & themes != (42);
-        `);
+        `;
+
+        const response = await fetchFromProxy(query);
 
         return {
             results: response.data.map((game) => ({
                 ...game,
                 image: game.cover
                     ? {
-                          original_url: game.cover.url.replace(
-                              't_thumb',
-                              't_cover_big'
-                          ),
-                      }
+                        original_url: game.cover.url.replace(
+                            't_thumb',
+                            't_cover_big'
+                        ),
+                    }
                     : null,
                 original_release_date: game.first_release_date
                     ? new Date(game.first_release_date * 1000)
-                          .toISOString()
-                          .split('T')[0]
+                        .toISOString()
+                        .split('T')[0]
                     : 'N/A',
                 guid: game.id,
                 name: game.name,
@@ -97,30 +68,32 @@ export const getGames = async (page = 1, limit = 20) => {
     }
 };
 
-export const searchGames = async (query, page = 1) => {
+export const searchGames = async (queryText, page = 1) => {
     try {
-        const response = await api.post('/games', `
+        const query = `
             fields name, cover.url, rating, first_release_date, summary, slug;
-            search "${query}";
+            search "${queryText}";
             limit 20;
             where cover != null & themes != (42);
-        `);
+        `;
+
+        const response = await fetchFromProxy(query);
 
         return {
             results: response.data.map((game) => ({
                 ...game,
                 image: game.cover
                     ? {
-                          original_url: game.cover.url.replace(
-                              't_thumb',
-                              't_cover_big'
-                          ),
-                      }
+                        original_url: game.cover.url.replace(
+                            't_thumb',
+                            't_cover_big'
+                        ),
+                    }
                     : null,
                 original_release_date: game.first_release_date
                     ? new Date(game.first_release_date * 1000)
-                          .toISOString()
-                          .split('T')[0]
+                        .toISOString()
+                        .split('T')[0]
                     : 'N/A',
                 guid: game.id,
                 name: game.name,
@@ -134,10 +107,12 @@ export const searchGames = async (query, page = 1) => {
 
 export const getGameDetails = async (id) => {
     try {
-        const response = await api.post('/games', `
+        const query = `
             fields name, cover.url, rating, first_release_date, summary, genres.name, platforms.name, screenshots.url, involved_companies.company.name, involved_companies.developer, involved_companies.publisher;
             where id = ${id};
-        `);
+        `;
+
+        const response = await fetchFromProxy(query);
 
         const game = response.data[0];
         if (!game) throw new Error('Game not found');
@@ -146,16 +121,16 @@ export const getGameDetails = async (id) => {
             ...game,
             image: game.cover
                 ? {
-                      original_url: game.cover.url.replace(
-                          't_thumb',
-                          't_1080p'
-                      ),
-                  }
+                    original_url: game.cover.url.replace(
+                        't_thumb',
+                        't_1080p'
+                    ),
+                }
                 : null,
             original_release_date: game.first_release_date
                 ? new Date(game.first_release_date * 1000)
-                      .toISOString()
-                      .split('T')[0]
+                    .toISOString()
+                    .split('T')[0]
                 : 'N/A',
             guid: game.id,
             description: game.summary,
@@ -165,18 +140,18 @@ export const getGameDetails = async (id) => {
                 : [],
             images: game.screenshots
                 ? game.screenshots.map((s) => ({
-                      original: s.url.replace('t_thumb', 't_1080p'),
-                  }))
+                    original: s.url.replace('t_thumb', 't_1080p'),
+                }))
                 : [],
             developers: game.involved_companies
                 ? game.involved_companies
-                      .filter((c) => c.developer)
-                      .map((c) => ({ name: c.company.name }))
+                    .filter((c) => c.developer)
+                    .map((c) => ({ name: c.company.name }))
                 : [],
             publishers: game.involved_companies
                 ? game.involved_companies
-                      .filter((c) => c.publisher)
-                      .map((c) => ({ name: c.company.name }))
+                    .filter((c) => c.publisher)
+                    .map((c) => ({ name: c.company.name }))
                 : [],
         };
     } catch (error) {
@@ -190,28 +165,30 @@ export const getGameDetails = async (id) => {
 
 export const getHighestRatedGames = async () => {
     try {
-        const response = await api.post('/games', `
+        const query = `
             fields name, cover.url, rating, first_release_date, summary, slug;
             sort rating desc;
             limit 10;
             where rating_count > 50 & cover != null & themes != (42);
-        `);
+        `;
+
+        const response = await fetchFromProxy(query);
 
         return {
             results: response.data.map((game) => ({
                 ...game,
                 image: game.cover
                     ? {
-                          original_url: game.cover.url.replace(
-                              't_thumb',
-                              't_cover_big'
-                          ),
-                      }
+                        original_url: game.cover.url.replace(
+                            't_thumb',
+                            't_cover_big'
+                        ),
+                    }
                     : null,
                 original_release_date: game.first_release_date
                     ? new Date(game.first_release_date * 1000)
-                          .toISOString()
-                          .split('T')[0]
+                        .toISOString()
+                        .split('T')[0]
                     : 'N/A',
                 guid: game.id,
                 name: game.name,
@@ -227,3 +204,4 @@ export const getHighestRatedGames = async () => {
 };
 
 export default api;
+
