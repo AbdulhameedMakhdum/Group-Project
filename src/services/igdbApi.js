@@ -6,43 +6,59 @@ const CLIENT_SECRET = import.meta.env.VITE_IGDB_CLIENT_SECRET;
 let accessToken = null;
 let tokenExpiration = 0;
 
+const TOKEN_URL = 'https://id.twitch.tv/oauth2/token';
+const IGDB_BASE_URL = 'https://api.igdb.com/v4';
+
+// Get OAuth token from Twitch (used for IGDB)
 const getAccessToken = async () => {
     const now = Date.now();
+
+    // reuse token if still valid
     if (accessToken && now < tokenExpiration) {
         return accessToken;
     }
 
     try {
-        const response = await axios.post('/api/twitch/token', null, {
-            params: {
-                client_id: CLIENT_ID,
-                client_secret: CLIENT_SECRET,
-                grant_type: 'client_credentials'
-            }
+        const params = new URLSearchParams();
+        params.append('client_id', CLIENT_ID);
+        params.append('client_secret', CLIENT_SECRET);
+        params.append('grant_type', 'client_credentials');
+
+        const { data } = await axios.post(TOKEN_URL, params, {
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
         });
 
-        accessToken = response.data.access_token;
-        tokenExpiration = now + (response.data.expires_in * 1000);
+        accessToken = data.access_token;
+        tokenExpiration = now + data.expires_in * 1000;
         return accessToken;
     } catch (error) {
-        console.error("Error fetching access token:", error);
+        console.error(
+            'Error fetching access token:',
+            error?.response?.data || error.message
+        );
         throw error;
     }
 };
 
+// Axios instance that talks directly to IGDB
 const api = axios.create({
-    baseURL: '/api/igdb',
+    baseURL: IGDB_BASE_URL,
     headers: {
         'Client-ID': CLIENT_ID,
         'Accept': 'application/json',
-    }
+    },
 });
 
+// Add token before every request
 api.interceptors.request.use(async (config) => {
     const token = await getAccessToken();
     config.headers.Authorization = `Bearer ${token}`;
     return config;
 });
+
+// ---- API functions ----
 
 export const getGames = async (page = 1, limit = 20) => {
     try {
@@ -56,16 +72,27 @@ export const getGames = async (page = 1, limit = 20) => {
         `);
 
         return {
-            results: response.data.map(game => ({
+            results: response.data.map((game) => ({
                 ...game,
-                image: game.cover ? { original_url: game.cover.url.replace('t_thumb', 't_cover_big') } : null,
-                original_release_date: game.first_release_date ? new Date(game.first_release_date * 1000).toISOString().split('T')[0] : 'N/A',
+                image: game.cover
+                    ? {
+                          original_url: game.cover.url.replace(
+                              't_thumb',
+                              't_cover_big'
+                          ),
+                      }
+                    : null,
+                original_release_date: game.first_release_date
+                    ? new Date(game.first_release_date * 1000)
+                          .toISOString()
+                          .split('T')[0]
+                    : 'N/A',
                 guid: game.id,
-                name: game.name
-            }))
+                name: game.name,
+            })),
         };
     } catch (error) {
-        console.error('Error fetching games:', error);
+        console.error('Error fetching games:', error?.response?.data || error);
         throw error;
     }
 };
@@ -80,16 +107,27 @@ export const searchGames = async (query, page = 1) => {
         `);
 
         return {
-            results: response.data.map(game => ({
+            results: response.data.map((game) => ({
                 ...game,
-                image: game.cover ? { original_url: game.cover.url.replace('t_thumb', 't_cover_big') } : null,
-                original_release_date: game.first_release_date ? new Date(game.first_release_date * 1000).toISOString().split('T')[0] : 'N/A',
+                image: game.cover
+                    ? {
+                          original_url: game.cover.url.replace(
+                              't_thumb',
+                              't_cover_big'
+                          ),
+                      }
+                    : null,
+                original_release_date: game.first_release_date
+                    ? new Date(game.first_release_date * 1000)
+                          .toISOString()
+                          .split('T')[0]
+                    : 'N/A',
                 guid: game.id,
-                name: game.name
-            }))
+                name: game.name,
+            })),
         };
     } catch (error) {
-        console.error('Error searching games:', error);
+        console.error('Error searching games:', error?.response?.data || error);
         throw error;
     }
 };
@@ -106,18 +144,46 @@ export const getGameDetails = async (id) => {
 
         return {
             ...game,
-            image: game.cover ? { original_url: game.cover.url.replace('t_thumb', 't_1080p') } : null,
-            original_release_date: game.first_release_date ? new Date(game.first_release_date * 1000).toISOString().split('T')[0] : 'N/A',
+            image: game.cover
+                ? {
+                      original_url: game.cover.url.replace(
+                          't_thumb',
+                          't_1080p'
+                      ),
+                  }
+                : null,
+            original_release_date: game.first_release_date
+                ? new Date(game.first_release_date * 1000)
+                      .toISOString()
+                      .split('T')[0]
+                : 'N/A',
             guid: game.id,
             description: game.summary,
-            genres: game.genres ? game.genres.map(g => ({ name: g.name })) : [],
-            platforms: game.platforms ? game.platforms.map(p => ({ name: p.name })) : [],
-            images: game.screenshots ? game.screenshots.map(s => ({ original: s.url.replace('t_thumb', 't_1080p') })) : [],
-            developers: game.involved_companies ? game.involved_companies.filter(c => c.developer).map(c => ({ name: c.company.name })) : [],
-            publishers: game.involved_companies ? game.involved_companies.filter(c => c.publisher).map(c => ({ name: c.company.name })) : []
+            genres: game.genres ? game.genres.map((g) => ({ name: g.name })) : [],
+            platforms: game.platforms
+                ? game.platforms.map((p) => ({ name: p.name }))
+                : [],
+            images: game.screenshots
+                ? game.screenshots.map((s) => ({
+                      original: s.url.replace('t_thumb', 't_1080p'),
+                  }))
+                : [],
+            developers: game.involved_companies
+                ? game.involved_companies
+                      .filter((c) => c.developer)
+                      .map((c) => ({ name: c.company.name }))
+                : [],
+            publishers: game.involved_companies
+                ? game.involved_companies
+                      .filter((c) => c.publisher)
+                      .map((c) => ({ name: c.company.name }))
+                : [],
         };
     } catch (error) {
-        console.error('Error fetching game details:', error);
+        console.error(
+            'Error fetching game details:',
+            error?.response?.data || error
+        );
         throw error;
     }
 };
@@ -132,18 +198,32 @@ export const getHighestRatedGames = async () => {
         `);
 
         return {
-            results: response.data.map(game => ({
+            results: response.data.map((game) => ({
                 ...game,
-                image: game.cover ? { original_url: game.cover.url.replace('t_thumb', 't_cover_big') } : null,
-                original_release_date: game.first_release_date ? new Date(game.first_release_date * 1000).toISOString().split('T')[0] : 'N/A',
+                image: game.cover
+                    ? {
+                          original_url: game.cover.url.replace(
+                              't_thumb',
+                              't_cover_big'
+                          ),
+                      }
+                    : null,
+                original_release_date: game.first_release_date
+                    ? new Date(game.first_release_date * 1000)
+                          .toISOString()
+                          .split('T')[0]
+                    : 'N/A',
                 guid: game.id,
-                name: game.name
-            }))
+                name: game.name,
+            })),
         };
     } catch (error) {
-        console.error("Error fetching highest rated games", error);
+        console.error(
+            'Error fetching highest rated games:',
+            error?.response?.data || error
+        );
         throw error;
     }
-}
+};
 
 export default api;
