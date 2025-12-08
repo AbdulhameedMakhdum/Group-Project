@@ -70,10 +70,13 @@ export const getGames = async (page = 1, limit = 20) => {
 
 export const searchGames = async (queryText, page = 1) => {
     try {
+        const limit = 20;
+        const offset = (page - 1) * limit;
         const query = `
             fields name, cover.url, rating, first_release_date, summary, slug;
             search "${queryText}";
-            limit 20;
+            limit ${limit};
+            offset ${offset};
             where cover != null & themes != (42);
         `;
 
