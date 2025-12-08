@@ -40,6 +40,7 @@ const SearchResults = () => {
 
     // Reset and fetch initial results when query changes
     useEffect(() => {
+        window.scrollTo(0, 0);
         setPage(1);
         setHasMore(true);
         fetchResults(1, false);
