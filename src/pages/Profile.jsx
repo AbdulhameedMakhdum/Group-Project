@@ -47,16 +47,33 @@ const Profile = () => {
     }, [currentUser, navigate]);
 
     const handleSaveProfile = async () => {
+        const nameToSave = editName.trim();
+
+        if (!nameToSave) {
+            addToast("Display name cannot be empty.", "error");
+            return;
+        }
+
+        if (!/^[a-zA-Z]/.test(nameToSave)) {
+            addToast("Display name must start with an English letter.", "error");
+            return;
+        }
+
+        if (!/^[a-zA-Z0-9-_]+$/.test(nameToSave)) {
+            addToast("Display name can only contain English letters, numbers, hyphens, and underscores.", "error");
+            return;
+        }
+
         setSaving(true);
         try {
             await firebaseService.updateUserProfile(currentUser, {
-                displayName: editName
+                displayName: nameToSave
             });
 
-            await firebaseService.updateUserCommentsName(currentUser.uid, editName);
+            await firebaseService.updateUserCommentsName(currentUser.uid, nameToSave);
 
             await setDoc(doc(firebaseService.db, "users", currentUser.uid), {
-                displayName: editName
+                displayName: nameToSave
             }, { merge: true });
 
             setIsEditing(false);
@@ -151,7 +168,7 @@ const Profile = () => {
                 <div className="relative group">
                     <div className="w-24 h-24 rounded-full overflow-hidden border-4 border-darker bg-darker flex items-center justify-center text-4xl font-bold text-white relative">
                         {currentUser.photoURL ? (
-                            <img src={currentUser.photoURL} alt="Profile" className="w-full h-full object-cover" />
+                            <img src={currentUser.photoURL} alt="Profile" className="w-full h-full object-cover" referrerPolicy="no-referrer" />
                         ) : (
                             <div className="w-full h-full bg-primary flex items-center justify-center">
                                 {currentUser.displayName ? currentUser.displayName[0].toUpperCase() : currentUser.email[0].toUpperCase()}

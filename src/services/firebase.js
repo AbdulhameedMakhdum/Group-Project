@@ -44,9 +44,17 @@ class FirebaseService {
         return signOut(this.auth);
     }
 
-    googleLogin() {
+    async googleLogin() {
         const provider = new GoogleAuthProvider();
-        return signInWithPopup(this.auth, provider);
+        const result = await signInWithPopup(this.auth, provider);
+        const { user, _tokenResponse } = result;
+        const isNewUser = _tokenResponse?.isNewUser;
+
+        if (isNewUser) {
+            await updateProfile(user, { displayName: user.email });
+        }
+
+        return result;
     }
 
     resetPassword(email) {
@@ -100,6 +108,11 @@ class FirebaseService {
             rating,
             timestamp: new Date()
         });
+    }
+
+    async removeRating(gameId, userId) {
+        const ratingRef = doc(this.db, "ratings", `${gameId}_${userId}`);
+        await deleteDoc(ratingRef);
     }
 
     async addComment(gameId, comment, userId, userName) {

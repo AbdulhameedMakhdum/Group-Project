@@ -97,6 +97,22 @@ const GameDetails = () => {
         }
     };
 
+    const handleRemoveRating = async () => {
+        if (!currentUser) return;
+
+        const previousRating = userRating;
+        setUserRating(0);
+
+        try {
+            await firebaseService.removeRating(guid, currentUser.uid);
+            addToast('Rating removed.', 'success');
+        } catch (err) {
+            console.error("Remove rating error:", err);
+            setUserRating(previousRating);
+            addToast(`Failed to remove rating: ${err.message}`, 'error');
+        }
+    };
+
     const handleComment = async (e) => {
         e.preventDefault();
         if (!currentUser) {
@@ -275,23 +291,36 @@ const GameDetails = () => {
                             </div>
 
                             <div>
-                                <label className="block text-sm text-gray-400 mb-2">Your Rating: <span className="text-primary font-bold">{userRating > 0 ? userRating : 'Not Rated'}</span></label>
-                                <div className="flex space-x-2" onMouseLeave={() => setHoverRating(0)}>
-                                    {[1, 2, 3, 4, 5].map((star) => (
+                                <label className="block text-sm text-gray-400 mb-2">
+                                    Your Rating: <span className="text-primary font-bold">{userRating > 0 ? userRating : 'Not Rated'}</span>
+                                </label>
+                                <div className="flex items-center space-x-4">
+                                    <div className="flex space-x-2" onMouseLeave={() => setHoverRating(0)}>
+                                        {[1, 2, 3, 4, 5].map((star) => (
+                                            <button
+                                                key={star}
+                                                onClick={() => handleRate(star)}
+                                                onMouseEnter={() => setHoverRating(star)}
+                                                className="transition-transform hover:scale-110 focus:outline-none"
+                                            >
+                                                <Star
+                                                    className={`w-8 h-8 ${(hoverRating || userRating) >= star
+                                                        ? 'fill-yellow-500 text-yellow-500'
+                                                        : 'text-gray-600'
+                                                        }`}
+                                                />
+                                            </button>
+                                        ))}
+                                    </div>
+                                    {userRating > 0 && (
                                         <button
-                                            key={star}
-                                            onClick={() => handleRate(star)}
-                                            onMouseEnter={() => setHoverRating(star)}
-                                            className="transition-transform hover:scale-110 focus:outline-none"
+                                            onClick={handleRemoveRating}
+                                            className="text-gray-400 hover:text-red-500 transition-colors p-2 rounded-full hover:bg-red-500/10"
+                                            title="Remove Rating"
                                         >
-                                            <Star
-                                                className={`w-8 h-8 ${(hoverRating || userRating) >= star
-                                                    ? 'fill-yellow-500 text-yellow-500'
-                                                    : 'text-gray-600'
-                                                    }`}
-                                            />
+                                            <Trash2 className="w-5 h-5" />
                                         </button>
-                                    ))}
+                                    )}
                                 </div>
                             </div>
                         </div>
